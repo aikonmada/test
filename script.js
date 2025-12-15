@@ -1,4 +1,9 @@
 // ======================
+// CONFIG
+// ======================
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjNlZWMyZTNjODlkYzRlODJhY2YyNDg4NTExZWM5MDJjIiwiaCI6Im11cm11cjY0In0=";
+
+// ======================
 // INIT MAP
 // ======================
 const map = L.map('map').setView([-6.2, 106.816666], 12);
@@ -11,100 +16,102 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 // DATA POS PEMADAM
 // ======================
 const fireStations = [
-  {
-    name: 'Pos Pemadam Jakarta Pusat',
-    lat: -6.1754,
-    lng: 106.8272
-  },
-  {
-    name: 'Pos Pemadam Jakarta Selatan',
-    lat: -6.2146,
-    lng: 106.8451
-  },
-  {
-    name: 'Pos Pemadam Jakarta Barat',
-    lat: -6.1683,
-    lng: 106.7588
-  }
+  { name: 'Pos Pemadam Jakarta Pusat', lat: -6.1754, lng: 106.8272 },
+  { name: 'Pos Pemadam Jakarta Selatan', lat: -6.2146, lng: 106.8451 },
+  { name: 'Pos Pemadam Jakarta Barat', lat: -6.1683, lng: 106.7588 }
 ];
 
 // Marker pos damkar
-fireStations.forEach(station => {
-  L.marker([station.lat, station.lng])
-    .addTo(map)
-    .bindPopup(station.name);
+fireStations.forEach(s => {
+  L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name);
 });
 
 let fireMarker = null;
-let nearestLine = null;
+let routeLine = null;
 
 // ======================
-// RUMUS HAVERSINE (JARAK)
+// HITUNG JARAK (HAVERSINE)
 // ======================
 function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
 
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1 * Math.PI / 180) *
     Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLon / 2) ** 2;
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ======================
+// AMBIL ROUTE DARI ORS
+// ======================
+async function getRoute(start, end) {
+  const response = await fetch(
+    "https://api.openrouteservice.org/v2/directions/driving-car",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        coordinates: [
+          [start.lng, start.lat],
+          [end.lng, end.lat]
+        ]
+      })
+    }
+  );
+
+  return response.json();
 }
 
 // ======================
 // KLIK PETA = KEBAKARAN
 // ======================
-map.on('click', function (e) {
-  const fireLat = e.latlng.lat;
-  const fireLng = e.latlng.lng;
+map.on('click', async function (e) {
+  const fire = { lat: e.latlng.lat, lng: e.latlng.lng };
 
-  // Marker kebakaran
   if (fireMarker) map.removeLayer(fireMarker);
-  if (nearestLine) map.removeLayer(nearestLine);
+  if (routeLine) map.removeLayer(routeLine);
 
-  fireMarker = L.marker([fireLat, fireLng], {
-    icon: L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/482/482216.png',
-      iconSize: [32, 32]
-    })
-  }).addTo(map).bindPopup('Lokasi Kebakaran').openPopup();
+  fireMarker = L.marker([fire.lat, fire.lng]).addTo(map)
+    .bindPopup("🔥 Lokasi Kebakaran")
+    .openPopup();
 
   // Cari pos terdekat
-  let nearestStation = null;
-  let minDistance = Infinity;
+  let nearest = null;
+  let minDist = Infinity;
 
-  fireStations.forEach(station => {
-    const distance = getDistance(
-      fireLat,
-      fireLng,
-      station.lat,
-      station.lng
-    );
-
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearestStation = station;
+  fireStations.forEach(s => {
+    const d = getDistance(fire.lat, fire.lng, s.lat, s.lng);
+    if (d < minDist) {
+      minDist = d;
+      nearest = s;
     }
   });
 
-  // Gambar garis ke pos terdekat
-  nearestLine = L.polyline([
-    [fireLat, fireLng],
-    [nearestStation.lat, nearestStation.lng]
-  ], {
+  // Ambil routing jalan asli
+  const routeData = await getRoute(nearest, fire);
+
+  const coords = routeData.features[0].geometry.coordinates;
+  const latlngs = coords.map(c => [c[1], c[0]]);
+
+  routeLine = L.polyline(latlngs, {
     color: 'red',
-    weight: 4
+    weight: 5
   }).addTo(map);
 
-  // Info popup
+  const summary = routeData.features[0].properties.summary;
+
   fireMarker.bindPopup(
     `🔥 Lokasi Kebakaran<br>
-     🚒 Pos Terdekat: <b>${nearestStation.name}</b><br>
-     📏 Jarak: ${minDistance.toFixed(2)} km`
+     🚒 Pos Terdekat: <b>${nearest.name}</b><br>
+     📏 Jarak Jalan: ${(summary.distance / 1000).toFixed(2)} km<br>
+     ⏱️ Waktu Tempuh: ${(summary.duration / 60).toFixed(1)} menit`
   ).openPopup();
 });
