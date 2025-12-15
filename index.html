@@ -7,20 +7,36 @@
   <!-- Leaflet CSS -->
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet/dist/leaflet.css"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   />
 
   <style>
-    body { margin: 0; }
-    #map { height: 100vh; width: 100%; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    #header {
+      padding: 10px;
+      background: #111;
+      color: white;
+      text-align: center;
+    }
+    #map {
+      height: calc(100vh - 50px);
+      width: 100%;
+    }
   </style>
 </head>
 <body>
 
+<div id="header">
+  <h2>Peta Pemadam Kebakaran 🔥</h2>
+</div>
+
 <div id="map"></div>
 
 <!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
 
 </body>
